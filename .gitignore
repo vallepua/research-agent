@@ -5,3 +5,4 @@ outputs/
 *.pdf
 *.xlsx
 *.csv
+.streamlit/secrets.toml
