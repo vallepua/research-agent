@@ -14,7 +14,14 @@ from agent.reader import get_paper_text
 from agent.summarizer import summarize_paper, summarize_uploaded_pdf
 from agent.writer import write_literature_review, save_review
 
+# Load API key - works both locally and on Streamlit Cloud
 load_dotenv()
+try:
+    api_key = st.secrets["GEMINI_API_KEY"]
+except:
+    api_key = os.getenv("GEMINI_API_KEY")
+
+os.environ["GEMINI_API_KEY"] = api_key or ""
 
 st.set_page_config(
     page_title="Research Paper Assistant",
@@ -42,7 +49,6 @@ with st.sidebar:
 
 tab1, tab2 = st.tabs(["🔍 Search & Review", "📤 Upload Your Paper"])
 
-# ── TAB 1 ─────────────────────────────────────────────────────
 with tab1:
     topic = st.text_input(
         "📝 Enter your research topic:",
@@ -53,13 +59,11 @@ with tab1:
     if run_button and topic:
         st.divider()
 
-        # STEP 1: Search
         with st.status("🔍 Searching 5 sources for papers...", expanded=True) as status:
             papers = search_papers(topic, max_papers=num_papers, year_from=year_from)
             if not papers:
                 st.error("No papers found. Try a broader topic.")
                 st.stop()
-            # Show which sources found papers
             sources = {}
             for p in papers:
                 src = p.get('source', 'Unknown')
@@ -68,7 +72,6 @@ with tab1:
             st.write(f"✅ Found {len(papers)} papers — {source_str}")
             status.update(label=f"✅ Found {len(papers)} papers", state="complete")
 
-        # Show papers list
         with st.expander(f"📚 Papers Found ({len(papers)})", expanded=False):
             for i, p in enumerate(papers, 1):
                 authors = ', '.join(p.get('authors', [])[:3])
@@ -76,7 +79,6 @@ with tab1:
                 st.caption(f"Authors: {authors} | Source: {p.get('source','')} | PDF: {'✅' if p.get('pdf_url') else '❌ abstract only'}")
                 st.divider()
 
-        # STEP 2: Read + Summarize
         summaries = []
         progress = st.progress(0, text="Starting summarization...")
         status_box = st.empty()
@@ -97,20 +99,16 @@ with tab1:
                     "venue": paper.get("venue", "")
                 }
             )
-            # Always use original metadata
             summary["venue"] = paper.get("venue", "Unknown")
             summary["year"] = paper.get("year", "Unknown")
             summary["paper_authors"] = ', '.join(paper.get("authors", [])[:5]) or summary.get("authors", "")
-            # Use real abstract from paper if it exists
             if paper.get("abstract") and len(paper.get("abstract", "")) > 30:
                 summary["abstract"] = paper["abstract"]
-
             summaries.append(summary)
 
         progress.progress(1.0, text="✅ All papers summarized!")
         status_box.empty()
 
-        # STEP 3: Build Table
         st.divider()
         st.markdown("## 📊 Literature Review Table")
         st.caption("Structured summary — download as Excel for your literature survey")
@@ -132,27 +130,8 @@ with tab1:
             })
 
         df = pd.DataFrame(rows)
+        st.dataframe(df, use_container_width=True, height=450)
 
-        st.dataframe(
-            df,
-            use_container_width=True,
-            height=450,
-            column_config={
-                "Paper Title": st.column_config.TextColumn(width="large"),
-                "Published Venue": st.column_config.TextColumn(width="medium"),
-                "Year": st.column_config.TextColumn(width="small"),
-                "Authors": st.column_config.TextColumn(width="medium"),
-                "Abstract": st.column_config.TextColumn(width="large"),
-                "Aim of the Paper": st.column_config.TextColumn(width="large"),
-                "Methods Used": st.column_config.TextColumn(width="large"),
-                "Key Results": st.column_config.TextColumn(width="large"),
-                "Conclusion": st.column_config.TextColumn(width="large"),
-                "Limitations / Open Challenges": st.column_config.TextColumn(width="large"),
-                "Identified Research Gap": st.column_config.TextColumn(width="large"),
-            }
-        )
-
-        # Downloads
         col1, col2 = st.columns(2)
         with col1:
             excel_path = f"/tmp/lit_{topic[:20].replace(' ','_')}.xlsx"
@@ -172,7 +151,6 @@ with tab1:
                 mime="text/csv"
             )
 
-        # STEP 4: Literature Review Text
         st.divider()
         st.markdown("## ✍️ Full Literature Review")
         with st.status("Writing literature review...", expanded=True) as status:
@@ -189,13 +167,12 @@ with tab1:
                 )
             else:
                 status.update(label="⚠️ Could not generate review text", state="error")
-                st.warning("The literature review text could not be generated due to API limits, but your table above has all the data. Try again in a few minutes.")
+                st.warning("API limit reached. Your table above has all the data. Try again in a few minutes.")
 
     elif run_button and not topic:
         st.warning("⚠️ Please enter a research topic first!")
 
 
-# ── TAB 2 ─────────────────────────────────────────────────────
 with tab2:
     st.markdown("## 📤 Upload Your Own Paper")
     st.markdown("Upload any PDF — get an instant structured summary in the same table format.")

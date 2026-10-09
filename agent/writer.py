@@ -3,15 +3,22 @@ from google import genai
 from dotenv import load_dotenv
 import os
 import time
-import re
 
 load_dotenv()
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+
+def _get_api_key():
+    try:
+        import streamlit as st
+        return st.secrets["GEMINI_API_KEY"]
+    except:
+        return os.getenv("GEMINI_API_KEY")
+
+client = genai.Client(api_key=_get_api_key())
+
 
 def write_literature_review(topic, summaries):
     print(f"Writing literature review for: {topic}")
 
-    # Build a concise summary to avoid token limits
     summaries_text = ""
     for i, s in enumerate(summaries, 1):
         summaries_text += f"\nPaper {i}: {s.get('title', '')[:80]}\n"
@@ -32,18 +39,13 @@ def write_literature_review(topic, summaries):
         "## 4. Research Gaps and Challenges\n"
         "## 5. Conclusion and Future Directions\n"
         "## References\n\n"
-        "Use formal academic English. Be specific. Minimum 600 words."
+        "Use formal academic English. Minimum 600 words."
     )
 
     for attempt in range(4):
         try:
-            # Wait longer between attempts
-            wait_time = 10 * (attempt + 1)
-            if attempt > 0:
-                print(f"Retrying literature review (attempt {attempt+1})... waiting {wait_time}s")
-                time.sleep(wait_time)
-            else:
-                time.sleep(5)
+            wait_time = 10 * (attempt + 1) if attempt > 0 else 5
+            time.sleep(wait_time)
 
             response = client.models.generate_content(
                 model="gemini-2.5-flash",
@@ -57,17 +59,14 @@ def write_literature_review(topic, summaries):
         except Exception as e:
             error_str = str(e)
             if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
-                wait = 70 * (attempt + 1)
-                print(f"Quota limit. Waiting {wait}s...")
-                time.sleep(wait)
+                time.sleep(70 * (attempt + 1))
+            elif "503" in error_str or "UNAVAILABLE" in error_str:
+                time.sleep(30 * (attempt + 1))
             elif "SSL" in error_str or "EOF" in error_str:
-                print(f"SSL/Network error on attempt {attempt+1}. Retrying...")
                 time.sleep(15)
             else:
-                print(f"Writing error: {e}")
                 time.sleep(10)
 
-    print("All attempts failed for literature review")
     return None
 
 
