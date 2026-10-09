@@ -6,14 +6,18 @@ import time
 
 load_dotenv()
 
-def _get_api_key():
-    try:
-        import streamlit as st
-        return st.secrets["GEMINI_API_KEY"]
-    except:
-        return os.getenv("GEMINI_API_KEY")
+_client = None
 
-client = genai.Client(api_key=_get_api_key())
+def _get_client():
+    global _client
+    if _client is None:
+        try:
+            import streamlit as st
+            key = st.secrets["GEMINI_API_KEY"]
+        except:
+            key = os.getenv("GEMINI_API_KEY")
+        _client = genai.Client(api_key=key)
+    return _client
 
 
 def write_literature_review(topic, summaries):
@@ -47,7 +51,7 @@ def write_literature_review(topic, summaries):
             wait_time = 10 * (attempt + 1) if attempt > 0 else 5
             time.sleep(wait_time)
 
-            response = client.models.generate_content(
+            response = _get_client().models.generate_content(
                 model="gemini-2.5-flash",
                 contents=prompt
             )

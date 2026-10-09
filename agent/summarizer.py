@@ -8,17 +8,20 @@ import time
 
 load_dotenv()
 
-def _get_api_key():
-    try:
-        import streamlit as st
-        return st.secrets["GEMINI_API_KEY"]
-    except:
-        return os.getenv("GEMINI_API_KEY")
-
-client = genai.Client(api_key=_get_api_key())
-
+_client = None
 _call_count = 0
 _last_call_time = 0
+
+def _get_client():
+    global _client
+    if _client is None:
+        try:
+            import streamlit as st
+            key = st.secrets["GEMINI_API_KEY"]
+        except:
+            key = os.getenv("GEMINI_API_KEY")
+        _client = genai.Client(api_key=key)
+    return _client
 
 
 def _safe_generate(prompt, retries=4):
@@ -35,7 +38,7 @@ def _safe_generate(prompt, retries=4):
             time.sleep(65)
 
         try:
-            response = client.models.generate_content(
+            response = _get_client().models.generate_content(
                 model="gemini-2.5-flash",
                 contents=prompt
             )
@@ -45,7 +48,6 @@ def _safe_generate(prompt, retries=4):
         except Exception as e:
             error_str = str(e)
             print(f"API error attempt {attempt+1}/{retries}: {error_str[:100]}")
-
             if "503" in error_str or "UNAVAILABLE" in error_str:
                 time.sleep(30 * (attempt + 1))
             elif "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
@@ -54,7 +56,6 @@ def _safe_generate(prompt, retries=4):
                 time.sleep(15 * (attempt + 1))
             else:
                 time.sleep(10 * (attempt + 1))
-
             if attempt == retries - 1:
                 return None
 
